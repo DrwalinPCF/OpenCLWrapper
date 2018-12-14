@@ -5,6 +5,7 @@ __kernel void VectorAdd( __global const float *A, __global const float *B, __glo
     int i = get_global_id(0);
  
     // Do the operation
-    C[i] = A[i] + ( B[i] * multiplier );
+    C[i] = pow( A[i] + B[i], multiplier );
+    
 }
 

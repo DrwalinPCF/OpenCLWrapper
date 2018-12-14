@@ -299,9 +299,23 @@ namespace CL
 		if( kernel )
 		{
 			cl_int ret = 0;
-			size_t globalItemSize = iterations;
 			size_t localItemSize = 64;
+			size_t localOffset = 0;
+			size_t globalItemSize;
+			
+			globalItemSize = iterations - (iterations%localItemSize);
 			ret = clEnqueueNDRangeKernel( commandQueue, *kernel, 1, nullptr, &globalItemSize, &localItemSize, 0, nullptr, nullptr );
+			PrintError( ret );
+			
+			localOffset = globalItemSize;
+			globalItemSize = iterations%localItemSize;
+			if( globalItemSize != 0 )
+			{
+				ret = clEnqueueNDRangeKernel( commandQueue, *kernel, 1, &localOffset, &globalItemSize, nullptr, 0, nullptr, nullptr );
+				PrintError( ret );
+			}
+			
+			ret = clFlush( commandQueue );
 			PrintError( ret );
 			return ret;
 		}

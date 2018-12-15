@@ -1,5 +1,5 @@
 
-#include "../src/OpenCLWrapper.h"
+#include "../../src/OpenCLWrapper.h"
 
 #include <ctime>
 #include <cmath>

@@ -52,7 +52,7 @@ namespace CL
 	
 	
 	template < typename T >
-	T * Allocate( unsigned long long elements, cl_mem_flags flags );
+	T * Allocate( unsigned long long elements, cl_mem_flags flags = CL_MEM_READ_WRITE );
 	
 	
 	unsigned Free( void* ptr );
@@ -99,7 +99,7 @@ namespace CL
 					mem->elements = elements;
 					mem->bytesPerElement = sizeof(T);
 					mem->ptr = ret;
-					mem->mem = clCreateBuffer( context, flags, elements*sizeof(T), nullptr, &error );
+					mem->mem = clCreateBuffer( context, flags, elements*sizeof(T), ( (flags&CL_MEM_USE_HOST_PTR) ? ret : nullptr ), &error );
 					if( error != 0 )
 					{
 						PrintError( error );

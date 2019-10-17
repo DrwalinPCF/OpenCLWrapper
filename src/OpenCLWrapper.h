@@ -29,38 +29,45 @@ namespace CL
 		cl_mem mem;
 	};
 	
-	// global instances:
-		extern cl_uint numberOfPlatforms;
-		extern cl_platform_id platformID;
-		extern cl_uint numberOfDevices;
-		extern cl_device_id deviceID;
-		extern cl_context context;
-		extern cl_command_queue commandQueue;
-		extern std::map < void*, MemoryObjectData* > memoryObjects;
-		extern std::map < std::string, ProgramData* > programs;
+	class Variable
+	{
+	public:
+		
+		cl_uint numberOfPlatforms;
+		cl_platform_id platformID;
+		cl_uint numberOfDevices;
+		cl_device_id deviceID;
+		cl_context context;
+		cl_command_queue commandQueue;
+		std::map < void*, MemoryObjectData* > memoryObjects;
+		std::map < std::string, ProgramData* > programs;
+		
+		Variable();
+		~Variable();
+	};
+	
+	extern Variable instance;
 	
 	
 	
+	unsigned Flush();
+	unsigned Finish();
 	cl_mem * GetMemoryObject( void* ptr );
 	
 	
 	const char * GetErrorString( cl_int error );
 	void PrintError( cl_int error );
-	
 	unsigned Init();
 	void DeInit();
 	
 	
 	template < typename T >
 	T * Allocate( unsigned long long elements, cl_mem_flags flags = CL_MEM_READ_WRITE );
-	
-	
 	unsigned Free( void* ptr );
 	unsigned CopyToVRAM( void* ptr );
 	unsigned CopyFromVRAM( void* ptr );
 	
-	
-	cl_kernel* GetFunction( const char* fileName, const char* function, unsigned * error = nullptr );
+	cl_kernel * GetFunction( const char* fileName, const char* function, unsigned * error = NULL );
 	unsigned DestroyFunction( cl_kernel* kernel );
 	
 	
@@ -76,6 +83,57 @@ namespace CL
 	unsigned For( unsigned long long iterations, cl_kernel* kernel, Args... args );
 	
 	
+	template < typename... Args >
+	class Function
+	{
+	public:
+		cl_kernel * kernel;
+		unsigned long long iterations;
+		
+		operator bool() const
+		{
+			return kernel!=NULL;
+		}
+		
+		Function & operator[]( const unsigned long long iterations )
+		{
+			this->iterations = iterations;
+			return *this;
+		}
+		
+		unsigned operator()( Args... args )
+		{
+			return For( this->iterations, this->kernel, args... );
+		}
+		
+		unsigned Destroy()
+		{
+			if( this->kernel )
+			{
+				unsigned ret = DestroyFunction( this->kernel );
+				this->kernel = NULL;
+				return ret;
+			}
+			return 0;
+		}
+		
+		Function( const char* fileName, const char* function, unsigned * error = NULL )
+		{
+			this->kernel = GetFunction(fileName,function,error);
+			this->iterations = 0;
+		}
+		
+		~Function()
+		{
+			this->Destroy();
+		}
+	};
+	template < typename... Args >
+	unsigned DestroyFunction( Function<Args...> & function )
+	{
+		return function.Destroy();
+	}
+	
 	
 	
 	
@@ -86,7 +144,7 @@ namespace CL
 		if( std::is_pointer<T>() )
 		{
 			printf( "\n Allocationg memory with CL::Allocate can not be a pointer type" );
-			return nullptr;
+			return NULL;
 		}
 		else
 		{
@@ -99,15 +157,15 @@ namespace CL
 					mem->elements = elements;
 					mem->bytesPerElement = sizeof(T);
 					mem->ptr = ret;
-					mem->mem = clCreateBuffer( context, flags, elements*sizeof(T), ( (flags&CL_MEM_USE_HOST_PTR) ? ret : nullptr ), &error );
+					mem->mem = clCreateBuffer( instance.context, flags, elements*sizeof(T), ( (flags&CL_MEM_USE_HOST_PTR) ? ret : NULL ), &error );
 					if( error != 0 )
 					{
 						PrintError( error );
 						free( mem );
 						free( ret );
-						return nullptr;
+						return NULL;
 					}
-					memoryObjects[ret] = mem;
+					instance.memoryObjects[ret] = mem;
 					return ret;
 				}
 				else
@@ -120,9 +178,8 @@ namespace CL
 				printf( "\n Can not allocate memory buffer with size: %llu ", (unsigned long long)(elements * sizeof(T)) );
 			}
 		}
-		return nullptr;
+		return NULL;
 	}
-	
 	
 	
 	template < typename T >
@@ -180,9 +237,6 @@ namespace CL
 		printf( "\n No given kernel to For" );
 		return 800;
 	}
-	
-	
-	
 };
 
 #endif

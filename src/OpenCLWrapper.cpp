@@ -6,38 +6,23 @@
 
 namespace CL
 {
-	cl_uint numberOfPlatforms = 0;
-	cl_platform_id platformID = nullptr;
+	Variable instance;	
 	
-	cl_uint numberOfDevices = 0;
-	cl_device_id deviceID = nullptr;
-	
-	cl_context context;
-	
-	cl_command_queue commandQueue;
-	
-	std::map < void*, MemoryObjectData* > memoryObjects;
-	std::map < std::string, ProgramData* > programs;
-	
-	
-	
-	
-	
-	unsigned Init()		// TODO: error checking
+	Variable::Variable()
 	{
 		cl_int ret = 0;
 		ret = clGetPlatformIDs( 1, &platformID, &numberOfPlatforms );
 		PrintError( ret );
 		ret = clGetDeviceIDs( platformID, CL_DEVICE_TYPE_GPU, 1, &deviceID, &numberOfDevices );
 		PrintError( ret );
-		context = clCreateContext( nullptr, 1, &deviceID, nullptr, nullptr, &ret );
+		context = clCreateContext( NULL, 1, &deviceID, NULL, NULL, &ret );
 		PrintError( ret );
 		commandQueue = clCreateCommandQueue( context, deviceID, 0, &ret );
 		PrintError( ret );
 		printf( "\n OpenCL inited" );
 	}
 	
-	void DeInit()
+	Variable::~Variable()
 	{
 		cl_int ret = 0;
 		ret = clFlush( commandQueue );
@@ -81,13 +66,13 @@ namespace CL
 	{
 		if( ptr )
 		{
-			auto it = memoryObjects.find( ptr );
-			if( it != memoryObjects.end() )
+			auto it = instance.memoryObjects.find( ptr );
+			if( it != instance.memoryObjects.end() )
 			{
 				return &(it->second->mem);
 			}
 		}
-		return nullptr;
+		return NULL;
 	}
 	
 	
@@ -97,14 +82,14 @@ namespace CL
 		cl_int ret = 0;
 		if( ptr )
 		{
-			auto it = memoryObjects.find( ptr );
-			if( it != memoryObjects.end() )
+			auto it = instance.memoryObjects.find( ptr );
+			if( it != instance.memoryObjects.end() )
 			{
 				ret = clReleaseMemObject( it->second->mem );
 				if( ret )
 					PrintError( ret );
 				free( it->second );
-				memoryObjects.erase( it );
+				instance.memoryObjects.erase( it );
 				free( ptr );
 				return ret;
 			}
@@ -116,7 +101,7 @@ namespace CL
 		}
 		else
 		{
-			printf( "\n Trying to CL::Free( nullptr ) " );
+			printf( "\n Trying to CL::Free( NULL ) " );
 		}
 		return 0;
 	}
@@ -126,12 +111,12 @@ namespace CL
 		cl_int ret = 0;
 		if( ptr )
 		{
-			auto it = memoryObjects.find( ptr );
-			if( it != memoryObjects.end() )
+			auto it = instance.memoryObjects.find( ptr );
+			if( it != instance.memoryObjects.end() )
 			{
-				ret = clEnqueueWriteBuffer( commandQueue, it->second->mem, CL_TRUE, 0, it->second->elements * it->second->bytesPerElement, ptr, 0, nullptr, nullptr );
-				ret = clFlush( commandQueue );
-				ret = clFinish( commandQueue );
+				ret = clEnqueueWriteBuffer( instance.commandQueue, it->second->mem, CL_TRUE, 0, it->second->elements * it->second->bytesPerElement, ptr, 0, NULL, NULL );
+				ret = clFlush( instance.commandQueue );
+				ret = clFinish( instance.commandQueue );
 				PrintError( ret );
 				return ret;
 			}
@@ -144,12 +129,12 @@ namespace CL
 		cl_int ret = 0;
 		if( ptr )
 		{
-			auto it = memoryObjects.find( ptr );
-			if( it != memoryObjects.end() )
+			auto it = instance.memoryObjects.find( ptr );
+			if( it != instance.memoryObjects.end() )
 			{
-				ret = clEnqueueReadBuffer( commandQueue, it->second->mem, CL_TRUE, 0, it->second->elements * it->second->bytesPerElement, ptr, 0, nullptr, nullptr );
-				ret = clFlush( commandQueue );
-				ret = clFinish( commandQueue );
+				ret = clEnqueueReadBuffer( instance.commandQueue, it->second->mem, CL_TRUE, 0, it->second->elements * it->second->bytesPerElement, ptr, 0, NULL, NULL );
+				ret = clFlush( instance.commandQueue );
+				ret = clFinish( instance.commandQueue );
 				PrintError( ret );
 				return ret;
 			}
@@ -157,6 +142,15 @@ namespace CL
 		return 0;
 	}
 	
+	unsigned Flush()
+	{
+		return clFlush( instance.commandQueue );
+	}
+	
+	unsigned Finish()
+	{
+		return clFinish( instance.commandQueue );
+	}
 	
 	
 	cl_kernel* GetFunction( const char* fileName, const char* function, unsigned * error )
@@ -164,8 +158,8 @@ namespace CL
 		if( fileName && function )
 		{
 			cl_int ret = 0;
-			auto it = programs.find( fileName );
-			if( it != programs.end() )
+			auto it = instance.programs.find( fileName );
+			if( it != instance.programs.end() )
 			{
 				auto it2 = it->second->kernels.find( function );
 				if( it2 != it->second->kernels.end() )
@@ -184,7 +178,7 @@ namespace CL
 								*error = ret;
 							delete kernel;
 							PrintError( ret );
-							return nullptr;
+							return NULL;
 						}
 						
 						it->second->kernels[ function ] = kernel;
@@ -196,13 +190,27 @@ namespace CL
 						printf( "\n Can not allocate memory for kernel" );
 						if( error )
 							*error = 203;
-						return nullptr;
+						return NULL;
 					}
 				}
 			}
 			else
 			{
-				FILE * file = fopen( fileName, "rb" );
+				char uniqueTempFileName[L_tmpnam+1];
+				if( tmpnam( uniqueTempFileName ) != uniqueTempFileName )
+				{
+					fprintf( stderr, "\n Cannot generate TMP file name!" );
+					return NULL;
+				}
+				
+				// preprocess file by CPP from MINGW/GCC
+				{
+					char commandBuffer[1024];
+					sprintf( commandBuffer, "cpp %s -o %s -P", fileName, uniqueTempFileName );
+					system( commandBuffer );
+				}
+				
+				FILE * file = fopen( uniqueTempFileName/*fileName*/, "rb" );
 				if( file )
 				{
 					fseek( file, 0, SEEK_END );
@@ -214,20 +222,21 @@ namespace CL
 					{
 						fread( source, size, 1, file );
 						fclose( file );
+						remove( uniqueTempFileName );
 						source[size] = 0;
 						
 						cl_int ret = 0;
 						
 						ProgramData* data = new ProgramData;
-						data->program = clCreateProgramWithSource( context, 1, (const char **)&(source), (const size_t*)&(size), &ret );
+						data->program = clCreateProgramWithSource( instance.context, 1, (const char **)&(source), (const size_t*)&(size), &ret );
 						free( source );
 						
-						ret = clBuildProgram( data->program, 1, &deviceID, nullptr, nullptr, nullptr );
+						ret = clBuildProgram( data->program, 1, &instance.deviceID, NULL, NULL, NULL );
 						
 						if( ret == 0 )
 						{
 							PrintError( ret );
-							programs[fileName] = data;
+							instance.programs[fileName] = data;
 							return GetFunction( fileName, function, error );
 						}
 						else
@@ -236,7 +245,7 @@ namespace CL
 								*error = ret;
 							delete data;
 							printf( "\n Can not load or build program from source file: \"%s\" ", fileName );
-							return nullptr;
+							return NULL;
 						}
 					}
 					else
@@ -246,7 +255,8 @@ namespace CL
 							*error = 201;
 						// error
 						fclose( file );
-						return nullptr;
+						remove( uniqueTempFileName );
+						return NULL;
 					}
 				}
 				else
@@ -255,12 +265,13 @@ namespace CL
 						*error = 202;
 					printf( "\n Can not open file: \"%s\" ", fileName );
 				}
+				remove( uniqueTempFileName );
 			}
-			return nullptr;
+			return NULL;
 		}
 		if( error )
 			*error = 200;
-		return nullptr;
+		return NULL;
 	}
 	
 	unsigned DestroyFunction( cl_kernel* kernel )
@@ -268,7 +279,7 @@ namespace CL
 		cl_int ret = 0;
 		if( kernel )
 		{
-			for( auto it1 = programs.begin(); it1 != programs.end(); ++it1 )
+			for( auto it1 = instance.programs.begin(); it1 != instance.programs.end(); ++it1 )
 			{
 				for( auto it2 = it1->second->kernels.begin(); it2 != it1->second->kernels.end(); ++it2 )
 				{
@@ -282,7 +293,7 @@ namespace CL
 						{
 							clReleaseProgram( it1->second->program );
 							delete it1->second;
-							programs.erase( it1 );
+							instance.programs.erase( it1 );
 						}
 						return ret;
 					}
@@ -304,18 +315,21 @@ namespace CL
 			size_t globalItemSize;
 			
 			globalItemSize = iterations - (iterations%localItemSize);
-			ret = clEnqueueNDRangeKernel( commandQueue, *kernel, 1, nullptr, &globalItemSize, &localItemSize, 0, nullptr, nullptr );
-			PrintError( ret );
+			if( iterations >= localItemSize )
+			{
+				ret = clEnqueueNDRangeKernel( instance.commandQueue, *kernel, 1, NULL, &globalItemSize, &localItemSize, 0, NULL, NULL );
+				PrintError( ret );
+			}
 			
 			localOffset = globalItemSize;
 			globalItemSize = iterations%localItemSize;
 			if( globalItemSize != 0 )
 			{
-				ret = clEnqueueNDRangeKernel( commandQueue, *kernel, 1, &localOffset, &globalItemSize, nullptr, 0, nullptr, nullptr );
+				ret = clEnqueueNDRangeKernel( instance.commandQueue, *kernel, 1, &localOffset, &globalItemSize, NULL, 0, NULL, NULL );
 				PrintError( ret );
 			}
 			
-			ret = clFlush( commandQueue );
+			ret = clFlush( instance.commandQueue );
 			PrintError( ret );
 			return ret;
 		}

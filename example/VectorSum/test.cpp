@@ -31,16 +31,13 @@ int power( int a, int b )
 
 int main()
 {
-	unsigned i;
+	unsigned i, beg;
 	
-	unsigned beg;
-	CL::Init();
+	unsigned size = 1024*1024*80;
 	
-	unsigned size = 1024*1024*80 + 1;
-	
-	int * a = CL::Allocate<int>( size, CL_MEM_READ_WRITE /*| CL_MEM_USE_HOST_PTR*/ );//CL_MEM_READ_ONLY );
-	int * b = CL::Allocate<int>( size, CL_MEM_READ_WRITE /*| CL_MEM_USE_HOST_PTR*/ );//CL_MEM_READ_ONLY );
-	int * c = CL::Allocate<int>( size, CL_MEM_READ_WRITE /*| CL_MEM_USE_HOST_PTR*/ );//CL_MEM_WRITE_ONLY );
+	int * a = CL::Allocate<int>( size, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR );//CL_MEM_READ_ONLY );
+	int * b = CL::Allocate<int>( size, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR );//CL_MEM_READ_ONLY );
+	int * c = CL::Allocate<int>( size, CL_MEM_READ_WRITE | CL_MEM_USE_HOST_PTR );//CL_MEM_WRITE_ONLY );
 	int * d = new int[size];
 	
 	for( i = 0; i < size; ++i )
@@ -64,25 +61,25 @@ int main()
 	CL::CopyToVRAM( b );
 	
 	unsigned sumTime = 0;
-	clFlush( CL::commandQueue );
-	clFinish( CL::commandQueue );
+	CL::Finish();
 	for( i = 0; i < 20; ++i )
 	{
 		beg = clock();
 		CL::For( size, function, a, b, c, multiplier );
-		clFlush( CL::commandQueue );
-		clFinish( CL::commandQueue );
+		CL::Finish();
 		sumTime += unsigned(clock()-beg);
 		printf( "\n For using GPU: %u ", unsigned(clock()-beg) );
+		/*
 		CL::CopyFromVRAM( c );
 		memcpy( a, c, sizeof(int)*size );
 		CL::CopyToVRAM( a );
+		*/
 	}
 	printf( "\n For using GPU mean time: %u ", sumTime / i );
 	
 	CL::CopyFromVRAM( c );
 	
-	/*
+	
 	for( i = 0; i < size; ++i )
 	{
 		if( abs(c[i]-d[i]) > 0.001 )
@@ -90,15 +87,13 @@ int main()
 			printf( "\n c[%u] != d[%u]  :  %i != %i ", i, i, c[i], d[i] );
 		}
 	}
-	*/
+	
 	
 	CL::DestroyFunction( function );
 	
 	CL::Free( a );
 	CL::Free( b );
 	CL::Free( c );
-	
-	CL::DeInit();
 	
 	delete[] d;
 	
